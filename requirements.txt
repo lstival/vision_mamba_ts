@@ -1,0 +1,24 @@
+# Core PyTorch and vision libraries
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Data science and visualization
+numpy>=1.21.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+pandas>=1.3.0
+
+# Machine learning utilities
+scikit-learn>=1.0.0
+tqdm>=4.64.0
+
+# Logging and experiment tracking
+tensorboard>=2.10.0
+
+# Optional: for better performance and additional features
+# Uncomment if needed:
+# timm>=0.6.0  # for additional model utilities
+# wandb>=0.13.0  # for experiment tracking
+# pillow>=8.0.0  # for image processing
+# opencv-python>=4.5.0  # for advanced image processing
