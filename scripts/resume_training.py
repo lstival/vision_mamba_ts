@@ -20,8 +20,12 @@ from tqdm import tqdm
 from collections import defaultdict
 from sklearn.metrics import classification_report
 
-from vision_mamba import create_vision_mamba_small, create_vision_mamba_base, create_vision_mamba_tiny
-from yaml_config import get_config, Config, list_available_configs
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from vision_mamba.models import create_vision_mamba_small, create_vision_mamba_base, create_vision_mamba_tiny
+from vision_mamba.config import get_config, Config, list_available_configs
 
 
 def set_seed(seed):

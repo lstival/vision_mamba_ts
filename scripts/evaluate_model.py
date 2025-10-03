@@ -29,8 +29,12 @@ from sklearn.metrics import (
 )
 
 # Import our modules
-from vision_mamba import create_vision_mamba_small, create_vision_mamba_base, create_vision_mamba_tiny
-from yaml_config import Config, get_config, list_available_configs
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from vision_mamba.models import create_vision_mamba_small, create_vision_mamba_base, create_vision_mamba_tiny
+from vision_mamba.config import Config, get_config, list_available_configs
 
 
 def find_best_checkpoint(experiment_name="vision_mamba_cifar10"):

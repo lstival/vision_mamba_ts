@@ -14,31 +14,58 @@ A comprehensive training framework for Vision Mamba models supporting both **ima
 - **Detailed Evaluation**: Confusion matrix, classification reports, and reconstruction visualizations
 - **Experiment Tracking**: TensorBoard integration and detailed logging
 - **Configurable**: Easy-to-modify configuration system for different experiments
+- **Organized Package Structure**: Well-structured Python package with modular components
 
-## Files Structure
+## Package Structure
 
 ```
-├── vision_mamba.py           # Vision Mamba model implementation (encoder)
-├── vision_mamba_mae.py       # Vision Mamba MAE model implementation
-├── config.py                 # Configuration system for experiments
-├── yaml_config.py            # YAML-based configuration system
-├── train_vision_mamba.py     # Main training script for classification
-├── train_vision_mamba_mae.py # MAE training script for self-supervised learning
-├── evaluate_model.py         # Model evaluation script
-├── demo_training.py          # Quick demo/testing script for classification
-├── demo_mae.py               # Quick demo/testing script for MAE
-├── evaluate_mae.py           # Comprehensive MAE evaluation script
-├── demo_mae_evaluation.py    # Demo script for MAE evaluation
-├── fast_attention.py         # Fast attention implementations
-├── fast_vision_mamba.py      # Vision Mamba with fast attention
-├── demo_fast_attention.py    # Demo script for fast attention
-├── FAST_ATTENTION_GUIDE.md   # Comprehensive fast attention guide
-├── requirements.txt          # Python dependencies
-├── configs/                  # Configuration files
-│   ├── cifar10_tiny.yaml     # CIFAR-10 classification config
-│   ├── cifar10_tiny_mae.yaml # CIFAR-10 MAE config
-│   └── ...                   # Other dataset configs
-└── README.md                # This file
+vision_mamba_ts/
+├── vision_mamba/                 # Main package
+│   ├── __init__.py              # Package initialization
+│   ├── models/                  # Model implementations
+│   │   ├── __init__.py
+│   │   ├── vision_mamba.py      # Vision Mamba model (encoder)
+│   │   └── vision_mamba_mae.py  # Vision Mamba MAE model
+│   ├── config/                  # Configuration management
+│   │   ├── __init__.py
+│   │   ├── yaml_config.py       # YAML-based configuration
+│   │   └── config.py            # Legacy dataclass configuration
+│   ├── training/                # Training utilities
+│   │   ├── __init__.py
+│   │   └── optimizers.py        # Optimizer and scheduler creation
+│   ├── evaluation/              # Evaluation utilities
+│   │   └── __init__.py
+│   └── utils/                   # Common utilities
+│       ├── __init__.py
+│       ├── common.py            # Common functions (seed, device)
+│       ├── metrics.py           # Metrics tracking
+│       ├── early_stopping.py   # Early stopping utility
+│       └── data_utils.py        # Data loading utilities
+├── scripts/                     # Main scripts
+│   ├── __init__.py
+│   ├── train_vision_mamba.py    # Classification training script
+│   ├── train_vision_mamba_mae.py # MAE training script
+│   ├── evaluate_model.py        # Model evaluation script
+│   ├── evaluate_mae.py          # MAE evaluation script
+│   └── resume_training.py       # Resume training script
+├── demos/                       # Demo scripts
+│   ├── __init__.py
+│   ├── demo_training.py         # Training demo
+│   ├── demo_mae.py              # MAE demo
+│   ├── demo_mae_evaluation.py   # MAE evaluation demo
+│   └── demo_evaluation.py       # Evaluation demo
+├── docs/                        # Documentation
+│   ├── EVALUATION_GUIDE.md      # Evaluation guide
+│   └── YAML_CONFIG_GUIDE.md     # Configuration guide
+├── configs/                     # Configuration files
+│   ├── cifar10_tiny.yaml        # CIFAR-10 classification config
+│   ├── cifar10_tiny_mae.yaml    # CIFAR-10 MAE config
+│   └── ...                      # Other dataset configs
+├── fast_Attention_test/         # Fast attention experiments
+├── setup.py                     # Package setup
+├── MANIFEST.in                  # Package manifest
+├── requirements.txt             # Python dependencies
+└── README.md                    # This file
 ```
 
 ## Installation
@@ -63,12 +90,12 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 **For Classification:**
 ```bash
-python demo_training.py
+python demos/demo_training.py
 ```
 
 **For MAE (Masked Autoencoder):**
 ```bash
-python demo_mae.py
+python demos/demo_mae.py
 ```
 
 ### 2. Train Models
@@ -77,24 +104,24 @@ python demo_mae.py
 
 Train on CIFAR-10 (recommended for quick testing):
 ```bash
-python train_vision_mamba.py --config cifar10_tiny
+python scripts/train_vision_mamba.py --config cifar10_tiny
 ```
 
 Train on CIFAR-100:
 ```bash
-python train_vision_mamba.py --config cifar100_tiny
+python scripts/train_vision_mamba.py --config cifar100_tiny
 ```
 
 Train on Fashion-MNIST:
 ```bash
-python train_vision_mamba.py --config fashion_mnist
+python scripts/train_vision_mamba.py --config fashion_mnist
 ```
 
 #### MAE (Self-Supervised) Training
 
 Train MAE on CIFAR-10 for self-supervised pre-training:
 ```bash
-python train_vision_mamba_mae.py --config cifar10_tiny_mae
+python scripts/train_vision_mamba_mae.py --config cifar10_tiny_mae
 ```
 
 Train MAE on CIFAR-100:

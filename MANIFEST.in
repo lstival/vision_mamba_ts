@@ -1,0 +1,19 @@
+include README.md
+include requirements.txt
+include setup.py
+recursive-include vision_mamba *.py
+recursive-include configs *.yaml
+recursive-include scripts *.py
+recursive-include demos *.py
+recursive-include docs *.md
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude *.orig
+global-exclude *.rej
+global-exclude *~
+global-exclude .git*
+prune logs
+prune tensorboard
+prune checkpoints
+prune evaluation_results
+prune data

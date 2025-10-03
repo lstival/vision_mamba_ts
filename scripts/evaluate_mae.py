@@ -34,8 +34,12 @@ except ImportError:
     print("Install with: pip install scikit-image")
 
 # Import our modules
-from vision_mamba_mae import create_vision_mamba_mae, VisionMambaMAE
-from yaml_config import Config, get_config, load_config
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from vision_mamba.models import create_vision_mamba_mae, VisionMambaMAE
+from vision_mamba.config import Config, get_config, load_config
 
 
 class MAEEvaluator:

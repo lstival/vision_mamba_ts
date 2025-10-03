@@ -1,9 +1,74 @@
-/tensorboard
-/logs
-/checkpoints
-/__pycache__
-/data
-/evaluation_results
-/fast_Attention_test
-/_old
+# Training outputs
+/tensorboard/
+/logs/
+/checkpoints/
+/data/
+/evaluation_results/
+
+# Python
+/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyTorch
+*.pth
+*.ckpt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Images and plots
 *.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+
+# Old files
+/fast_Attention_test/
+/_old/

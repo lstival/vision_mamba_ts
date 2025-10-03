@@ -250,17 +250,18 @@ def create_config_template(output_path: str):
 if __name__ == "__main__":
     # Example usage
     print("Available configurations:")
-    configs = list_available_configs()
+    config_dir = "../../configs"
+    configs = list_available_configs(config_dir)
     for config in configs:
         print(f"  - {config}")
     
     if configs:
         # Load first available config as example
-        config = get_config(configs[1])
+        config = get_config(configs[1], config_dir=config_dir)
         print(f"\nLoaded config: {config}")
         print(f"Experiment: {config.experiment_name}")
         print(f"Dataset: {config.data.dataset_name}")
-        print(f"Model: {config.model.name}")
+        # print(f"Model: {config.model.name}")
         print(f"Batch size: {config.data.batch_size}")
         print(f"Learning rate: {config.training.learning_rate}")
         print(f"Epochs: {config.training.epochs}")

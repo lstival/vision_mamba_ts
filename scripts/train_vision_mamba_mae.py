@@ -1,15 +1,15 @@
 """
-Training script for Vision Mamba model
-Supports various torchvision datasets with comprehensive logging and evaluation
+Training script for Vision Mamba Masked Autoencoder (MAE)
+Supports various torchvision datasets with comprehensive logging and visualization
 """
+
 import os
 import sys
+import argparse
 import json
 import time
 import random
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from datetime import datetime
 from tqdm import tqdm
 from collections import defaultdict
@@ -17,19 +17,26 @@ from collections import defaultdict
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import torchvision
 import torchvision.transforms as transforms
-from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import mean_squared_error
 
 # Import our modules
-from vision_mamba import create_vision_mamba_small, create_vision_mamba_base, create_vision_mamba_tiny, VisionMamba
-from yaml_config import Config, get_config, list_available_configs
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from vision_mamba.models import create_vision_mamba_mae, VisionMambaMAE
+from vision_mamba.config import Config, get_config, list_available_configs
 
 
 class EarlyStopping:
-    """Early stopping utility"""
+    """Early stopping utility for MAE training"""
     def __init__(self, patience=15, min_delta=1e-4, restore_best_weights=True):
         self.patience = patience
         self.min_delta = min_delta
@@ -61,29 +68,24 @@ class EarlyStopping:
         self.best_weights = model.state_dict().copy()
 
 
-class MetricsTracker:
-    """Track and compute training metrics"""
+class MAEMetricsTracker:
+    """Track and compute MAE training metrics"""
     def __init__(self):
         self.reset()
         
     def reset(self):
         self.metrics = defaultdict(list)
         self.running_loss = 0.0
-        self.running_correct = 0
         self.total_samples = 0
         
-    def update(self, loss, predictions, targets):
-        batch_size = targets.size(0)
+    def update(self, loss, batch_size):
         self.running_loss += loss * batch_size
-        self.running_correct += (predictions == targets).sum().item()
         self.total_samples += batch_size
         
     def get_metrics(self):
         avg_loss = self.running_loss / self.total_samples
-        accuracy = self.running_correct / self.total_samples
         return {
-            'loss': avg_loss,
-            'accuracy': accuracy
+            'loss': avg_loss
         }
         
     def log_metrics(self, metrics, prefix=''):
@@ -111,9 +113,16 @@ def get_device(device_config):
 
 
 def create_data_loaders(config: Config):
-    """Create data loaders for training and validation"""
+    """Create data loaders for MAE training"""
     
-    # Define transforms
+    # Define transforms - simpler for MAE since we're reconstructing original images
+    # We don't want heavy augmentations that make reconstruction too difficult
+    base_transforms = [
+        transforms.Resize((config.model.img_size, config.model.img_size)),
+        transforms.ToTensor(),
+    ]
+    
+    # Optional normalization
     if config.data.normalize:
         if config.data.dataset_name in ["CIFAR10", "CIFAR100"]:
             normalize = transforms.Normalize(
@@ -122,36 +131,30 @@ def create_data_loaders(config: Config):
             )
         elif config.data.dataset_name == "FashionMNIST":
             normalize = transforms.Normalize(
-                mean=[0.286],
-                std=[0.353]
+                mean=[0.5], std=[0.5]
             )
         else:
             normalize = transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225]
             )
-    else:
-        normalize = transforms.Lambda(lambda x: x)
+        base_transforms.append(normalize)
     
-    # Training transforms
+    # Light augmentation for training (optional)
     train_transforms = []
-    if config.data.random_crop and config.data.dataset_name not in ["FashionMNIST"]:
-        train_transforms.append(transforms.RandomCrop(32, padding=4))
-    if config.data.random_flip:
-        train_transforms.append(transforms.RandomHorizontalFlip())
+    if config.data.use_augmentation:
+        if config.data.random_flip:
+            train_transforms.append(transforms.RandomHorizontalFlip(p=0.5))
+        # Add small random crop for slight variation
+        if config.data.random_crop and config.data.dataset_name not in ["FashionMNIST"]:
+            train_transforms.append(transforms.RandomCrop(
+                # (config.model.img_size, config.model.img_size), 
+                (40, 40), 
+                padding=4
+            ))
     
-    train_transforms.extend([
-        transforms.Resize((config.model.img_size, config.model.img_size)),
-        transforms.ToTensor(),
-        normalize
-    ])
-    
-    # Validation transforms
-    val_transforms = [
-        transforms.Resize((config.model.img_size, config.model.img_size)),
-        transforms.ToTensor(),
-        normalize
-    ]
+    train_transforms.extend(base_transforms)
+    val_transforms = base_transforms.copy()
     
     train_transform = transforms.Compose(train_transforms)
     val_transform = transforms.Compose(val_transforms)
@@ -164,8 +167,6 @@ def create_data_loaders(config: Config):
         val_dataset = torchvision.datasets.CIFAR10(
             root=config.data.data_dir, train=False, download=True, transform=val_transform
         )
-        class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 
-                      'dog', 'frog', 'horse', 'ship', 'truck']
         
     elif config.data.dataset_name == "CIFAR100":
         train_dataset = torchvision.datasets.CIFAR100(
@@ -174,7 +175,6 @@ def create_data_loaders(config: Config):
         val_dataset = torchvision.datasets.CIFAR100(
             root=config.data.data_dir, train=False, download=True, transform=val_transform
         )
-        class_names = [f"class_{i}" for i in range(100)]
         
     elif config.data.dataset_name == "FashionMNIST":
         train_dataset = torchvision.datasets.FashionMNIST(
@@ -183,8 +183,7 @@ def create_data_loaders(config: Config):
         val_dataset = torchvision.datasets.FashionMNIST(
             root=config.data.data_dir, train=False, download=True, transform=val_transform
         )
-        class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
-                      'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
+        
     elif config.data.dataset_name == "imagenet":
         train_dataset = torchvision.datasets.ImageNet(
             root=config.data.data_dir, train=True, download=True, transform=train_transform
@@ -192,7 +191,6 @@ def create_data_loaders(config: Config):
         val_dataset = torchvision.datasets.ImageNet(
             root=config.data.data_dir, train=False, download=True, transform=val_transform
         )
-        class_names = []
     else:
         raise ValueError(f"Unsupported dataset: {config.data.dataset_name}")
     
@@ -213,53 +211,7 @@ def create_data_loaders(config: Config):
         pin_memory=config.data.pin_memory
     )
     
-    return train_loader, val_loader, class_names
-
-
-def create_model(config: Config):
-    """Create the Vision Mamba model"""
-    if config.model.model_name == "vision_mamba_small":
-        model = create_vision_mamba_small(
-            img_size=config.model.img_size,
-            patch_size=config.model.patch_size,
-            in_channels=config.model.in_channels,
-            embed_dim=config.model.embed_dim,
-            depth=config.model.depth,
-            d_state=config.model.d_state,
-            d_conv=config.model.d_conv,
-            num_heads=config.model.num_heads,
-            mlp_ratio=config.model.mlp_ratio,
-            dropout=config.model.dropout,
-            num_classes=config.data.num_classes,
-            use_cls_token=config.model.use_cls_token
-        )
-    elif config.model.model_name == "vision_mamba_tiny":
-        model = create_vision_mamba_tiny(
-            img_size=config.model.img_size,
-            patch_size=config.model.patch_size,
-            in_channels=config.model.in_channels,
-            embed_dim=config.model.embed_dim,
-            depth=config.model.depth,
-            d_state=config.model.d_state,
-            d_conv=config.model.d_conv,
-            num_heads=config.model.num_heads,
-            mlp_ratio=config.model.mlp_ratio,
-            dropout=config.model.dropout,
-            num_classes=config.data.num_classes,
-            use_cls_token=config.model.use_cls_token
-        )
-    elif config.model.model_name == "vision_mamba_base":
-        model = create_vision_mamba_base(
-            img_size=config.model.img_size,
-            patch_size=config.model.patch_size,
-            in_channels=config.model.in_channels,
-            num_classes=config.data.num_classes,
-            use_cls_token=config.model.use_cls_token
-        )
-    else:
-        raise ValueError(f"Unknown model: {config.model.model_name}")
-    
-    return model
+    return train_loader, val_loader
 
 
 def create_optimizer(model, config: Config):
@@ -317,21 +269,20 @@ def create_scheduler(optimizer, config: Config, steps_per_epoch):
     return scheduler
 
 
-def train_epoch(model, train_loader, criterion, optimizer, device, config, scaler=None):
+def train_epoch(model, train_loader, optimizer, device, config, scaler=None):
     """Train for one epoch"""
     model.train()
-    metrics_tracker = MetricsTracker()
+    metrics_tracker = MAEMetricsTracker()
     
     pbar = tqdm(train_loader, desc="Training")
-    for batch_idx, (data, targets) in enumerate(pbar):
-        data, targets = data.to(device), targets.to(device)
+    for batch_idx, (data, _) in enumerate(pbar):  # Ignore labels for MAE
+        data = data.to(device, non_blocking=True)
         
         optimizer.zero_grad()
         
         if config.training.use_amp and scaler is not None:
             with torch.cuda.amp.autocast():
-                outputs = model(data)
-                loss = criterion(outputs, targets)
+                loss, pred, mask = model(data)
             
             scaler.scale(loss).backward()
             if config.training.max_grad_norm > 0:
@@ -340,8 +291,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, config, scale
             scaler.step(optimizer)
             scaler.update()
         else:
-            outputs = model(data)
-            loss = criterion(outputs, targets)
+            loss, pred, mask = model(data)
             loss.backward()
             
             if config.training.max_grad_norm > 0:
@@ -349,89 +299,112 @@ def train_epoch(model, train_loader, criterion, optimizer, device, config, scale
             optimizer.step()
         
         # Update metrics
-        predictions = outputs.argmax(dim=1)
-        metrics_tracker.update(loss.item(), predictions, targets)
+        metrics_tracker.update(loss.item(), data.size(0))
         
         # Update progress bar
         if batch_idx % config.logging.log_interval == 0:
-            current_metrics = metrics_tracker.get_metrics()
             pbar.set_postfix({
-                'Loss': f"{current_metrics['loss']:.4f}",
-                'Acc': f"{current_metrics['accuracy']:.4f}"
+                'Loss': f'{loss.item():.4f}',
+                'Mask': f'{mask.mean().item():.3f}'
             })
     
     return metrics_tracker.get_metrics()
 
 
-def validate_epoch(model, val_loader, criterion, device):
+def validate_epoch(model, val_loader, device):
     """Validate for one epoch"""
     model.eval()
-    metrics_tracker = MetricsTracker()
-    all_predictions = []
-    all_targets = []
+    metrics_tracker = MAEMetricsTracker()
     
     with torch.no_grad():
         pbar = tqdm(val_loader, desc="Validation")
-        for data, targets in pbar:
-            data, targets = data.to(device), targets.to(device)
+        for data, _ in pbar:  # Ignore labels for MAE
+            data = data.to(device, non_blocking=True)
             
-            outputs = model(data)
-            loss = criterion(outputs, targets)
+            loss, pred, mask = model(data)
             
-            predictions = outputs.argmax(dim=1)
-            metrics_tracker.update(loss.item(), predictions, targets)
+            # Update metrics
+            metrics_tracker.update(loss.item(), data.size(0))
             
-            all_predictions.extend(predictions.cpu().numpy())
-            all_targets.extend(targets.cpu().numpy())
-            
-            current_metrics = metrics_tracker.get_metrics()
             pbar.set_postfix({
-                'Loss': f"{current_metrics['loss']:.4f}",
-                'Acc': f"{current_metrics['accuracy']:.4f}"
+                'Loss': f'{loss.item():.4f}',
+                'Mask': f'{mask.mean().item():.3f}'
             })
     
-    metrics = metrics_tracker.get_metrics()
-    return metrics, all_predictions, all_targets
+    return metrics_tracker.get_metrics()
 
 
-def plot_confusion_matrix(y_true, y_pred, class_names, save_path):
-    """Plot and save confusion matrix"""
-    cm = confusion_matrix(y_true, y_pred)
+def visualize_mae_results(model, data_loader, device, save_path, num_samples=8):
+    """Visualize MAE reconstruction results"""
+    model.eval()
     
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=class_names, yticklabels=class_names)
-    plt.title('Confusion Matrix')
-    plt.xlabel('Predicted')
-    plt.ylabel('Actual')
+    # Get a batch of images
+    data_iter = iter(data_loader)
+    images, _ = next(data_iter)
+    images = images[:num_samples].to(device)
+    
+    with torch.no_grad():
+        results = model.visualize_reconstruction(images)
+    
+    # Convert to numpy and denormalize if needed
+    original = results['original'].cpu()
+    masked = results['masked'].cpu()
+    reconstructed = results['reconstructed'].cpu()
+    
+    # Create visualization
+    fig, axes = plt.subplots(3, num_samples, figsize=(num_samples * 2, 6))
+    
+    for i in range(num_samples):
+        # Original image
+        img_orig = original[i].permute(1, 2, 0)
+        if img_orig.shape[2] == 1:  # Grayscale
+            axes[0, i].imshow(img_orig.squeeze(), cmap='gray')
+        else:
+            # Clamp values to [0, 1] for display
+            img_orig = torch.clamp(img_orig, 0, 1)
+            axes[0, i].imshow(img_orig)
+        axes[0, i].set_title('Original')
+        axes[0, i].axis('off')
+        
+        # Masked image
+        img_masked = masked[i].permute(1, 2, 0)
+        if img_masked.shape[2] == 1:  # Grayscale
+            axes[1, i].imshow(img_masked.squeeze(), cmap='gray')
+        else:
+            img_masked = torch.clamp(img_masked, 0, 1)
+            axes[1, i].imshow(img_masked)
+        axes[1, i].set_title('Masked')
+        axes[1, i].axis('off')
+        
+        # Reconstructed image
+        img_recon = reconstructed[i].permute(1, 2, 0)
+        if img_recon.shape[2] == 1:  # Grayscale
+            axes[2, i].imshow(img_recon.squeeze(), cmap='gray')
+        else:
+            img_recon = torch.clamp(img_recon, 0, 1)
+            axes[2, i].imshow(img_recon)
+        axes[2, i].set_title('Reconstructed')
+        axes[2, i].axis('off')
+    
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close()
 
 
 def plot_training_curves(train_metrics, val_metrics, save_path):
-    """Plot training curves"""
+    """Plot training curves for MAE"""
     epochs = range(1, len(train_metrics['loss']) + 1)
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
     
     # Loss curves
-    ax1.plot(epochs, train_metrics['loss'], 'b-', label='Training Loss')
-    ax1.plot(epochs, val_metrics['loss'], 'r-', label='Validation Loss')
-    ax1.set_title('Training and Validation Loss')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
-    ax1.legend()
-    ax1.grid(True)
-    
-    # Accuracy curves
-    ax2.plot(epochs, train_metrics['accuracy'], 'b-', label='Training Accuracy')
-    ax2.plot(epochs, val_metrics['accuracy'], 'r-', label='Validation Accuracy')
-    ax2.set_title('Training and Validation Accuracy')
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Accuracy')
-    ax2.legend()
-    ax2.grid(True)
+    ax.plot(epochs, train_metrics['loss'], 'b-', label='Training Loss')
+    ax.plot(epochs, val_metrics['loss'], 'r-', label='Validation Loss')
+    ax.set_title('MAE Training and Validation Loss')
+    ax.set_xlabel('Epoch')
+    ax.set_ylabel('Reconstruction Loss')
+    ax.legend()
+    ax.grid(True)
     
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -442,17 +415,21 @@ def save_training_log(config, train_metrics, val_metrics, best_epoch, save_path)
     """Save training log as JSON"""
     log_data = {
         'experiment_name': config.experiment_name,
+        'model_type': 'MAE',
         'config': {
             'model': {
                 'name': config.model.model_name,
                 'embed_dim': config.model.embed_dim,
                 'depth': config.model.depth,
-                'num_heads': config.model.num_heads
+                'num_heads': config.model.num_heads,
+                'mask_ratio': getattr(config.model, 'mask_ratio', 0.75),
+                'decoder_embed_dim': getattr(config.model, 'decoder_embed_dim', 512),
+                'decoder_depth': getattr(config.model, 'decoder_depth', 8)
             },
             'data': {
                 'dataset': config.data.dataset_name,
                 'batch_size': config.data.batch_size,
-                'num_classes': config.data.num_classes
+                'img_size': config.model.img_size
             },
             'training': {
                 'epochs': config.training.epochs,
@@ -463,16 +440,13 @@ def save_training_log(config, train_metrics, val_metrics, best_epoch, save_path)
         },
         'results': {
             'best_epoch': best_epoch,
-            'best_val_acc': max(val_metrics['accuracy']),
             'best_val_loss': min(val_metrics['loss']),
-            'final_train_acc': train_metrics['accuracy'][-1],
-            'final_train_loss': train_metrics['loss'][-1]
+            'final_train_loss': train_metrics['loss'][-1],
+            'final_val_loss': val_metrics['loss'][-1]
         },
         'training_history': {
             'train_loss': train_metrics['loss'],
-            'train_accuracy': train_metrics['accuracy'],
-            'val_loss': val_metrics['loss'],
-            'val_accuracy': val_metrics['accuracy']
+            'val_loss': val_metrics['loss']
         }
     }
     
@@ -482,9 +456,7 @@ def save_training_log(config, train_metrics, val_metrics, best_epoch, save_path)
 
 def main():
     """Main training function"""
-    # Parse arguments or use default config
-    import argparse
-    parser = argparse.ArgumentParser(description='Train Vision Mamba')
+    parser = argparse.ArgumentParser(description='Train Vision Mamba MAE')
     parser.add_argument('--config', type=str, default='cifar10_tiny',
                        help='Configuration name (without .yaml extension)')
     parser.add_argument('--config-path', type=str, default=None,
@@ -505,10 +477,44 @@ def main():
     
     # Get configuration
     if args.config_path:
-        from yaml_config import load_config
+        from vision_mamba.config import load_config
         config = load_config(args.config_path)
     else:
         config = get_config(args.config)
+    
+    # Generate timestamp for unique model naming
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    
+    # Update experiment name for MAE with timestamp
+    config.experiment_name = f"{config.experiment_name}_mae_{timestamp}"
+    
+    print(f"Experiment name: {config.experiment_name}")
+    print(f"Timestamp: {timestamp}")
+    
+    # Add MAE-specific model parameters if not present
+    if not hasattr(config.model, 'mask_ratio'):
+        config.model.mask_ratio = 0.75
+    if not hasattr(config.model, 'decoder_embed_dim'):
+        config.model.decoder_embed_dim = 192
+    if not hasattr(config.model, 'decoder_depth'):
+        config.model.decoder_depth = 16
+    if not hasattr(config.model, 'decoder_num_heads'):
+        config.model.decoder_num_heads = 2
+    
+    # Update logging directories
+    config.logging.log_dir = os.path.join(config.logging.log_dir, config.experiment_name)
+    config.logging.checkpoint_dir = os.path.join(config.logging.checkpoint_dir, config.experiment_name)
+    config.logging.tensorboard_dir = os.path.join(config.logging.tensorboard_dir, config.experiment_name)
+    
+    # Create directories
+    os.makedirs(config.logging.log_dir, exist_ok=True)
+    os.makedirs(config.logging.checkpoint_dir, exist_ok=True)
+    os.makedirs(config.logging.tensorboard_dir, exist_ok=True)
+    
+    print(f"Output directories created:")
+    print(f"  - Logs: {config.logging.log_dir}")
+    print(f"  - Checkpoints: {config.logging.checkpoint_dir}")
+    print(f"  - Tensorboard: {config.logging.tensorboard_dir}")
     
     # Set seed
     set_seed(config.seed)
@@ -519,27 +525,29 @@ def main():
     
     # Create data loaders
     print("Creating data loaders...")
-    train_loader, val_loader, class_names = create_data_loaders(config)
+    train_loader, val_loader = create_data_loaders(config)
     print(f"Train samples: {len(train_loader.dataset)}")
     print(f"Val samples: {len(val_loader.dataset)}")
     
     # Create model
-    print("Creating model...")
-    model = create_model(config)
+    print("Creating MAE model...")
+    model = create_vision_mamba_mae(config)
     model = model.to(device)
     
     # Print model info
     total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    encoder_params = sum(p.numel() for p in model.encoder.parameters())
+    decoder_params = sum(p.numel() for p in model.decoder.parameters())
+    
     print(f"Total parameters: {total_params:,}")
-    print(f"Trainable parameters: {trainable_params:,}")
+    print(f"Encoder parameters: {encoder_params:,}")
+    print(f"Decoder parameters: {decoder_params:,}")
+    print(f"Decoder/Encoder ratio: {decoder_params/encoder_params:.3f}")
+    print(f"Mask ratio: {config.model.mask_ratio}")
     
     # Create optimizer and scheduler
     optimizer = create_optimizer(model, config)
     scheduler = create_scheduler(optimizer, config, len(train_loader))
-    
-    # Create loss function
-    criterion = nn.CrossEntropyLoss(label_smoothing=config.training.label_smoothing)
     
     # Create AMP scaler if using mixed precision
     scaler = torch.cuda.amp.GradScaler() if config.training.use_amp and device.type == 'cuda' else None
@@ -554,12 +562,12 @@ def main():
     writer = SummaryWriter(config.logging.tensorboard_dir)
     
     # Training loop
-    print(f"Starting training for {config.training.epochs} epochs...")
+    print(f"Starting MAE training for {config.training.epochs} epochs...")
     start_time = time.time()
     
     train_metrics = defaultdict(list)
     val_metrics = defaultdict(list)
-    best_val_acc = 0.0
+    best_val_loss = float('inf')
     best_epoch = 0
     
     for epoch in range(config.training.epochs):
@@ -567,21 +575,19 @@ def main():
         
         # Train
         epoch_train_metrics = train_epoch(
-            model, train_loader, criterion, optimizer, device, config, scaler
+            model, train_loader, optimizer, device, config, scaler
         )
         
         # Validate
         if (epoch + 1) % config.logging.val_interval == 0:
-            epoch_val_metrics, val_predictions, val_targets = validate_epoch(
-                model, val_loader, criterion, device
-            )
+            epoch_val_metrics = validate_epoch(model, val_loader, device)
         else:
-            epoch_val_metrics = {'loss': float('inf'), 'accuracy': 0.0}
-            val_predictions, val_targets = [], []
+            # Use previous validation metrics if not validating this epoch
+            epoch_val_metrics = {'loss': val_metrics['loss'][-1]} if val_metrics['loss'] else {'loss': 0.0}
         
         # Update learning rate
         if scheduler is not None:
-            if config.training.scheduler.lower() == "plateau":
+            if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
                 scheduler.step(epoch_val_metrics['loss'])
             else:
                 scheduler.step()
@@ -595,19 +601,15 @@ def main():
         # TensorBoard logging
         writer.add_scalar('Loss/Train', epoch_train_metrics['loss'], epoch)
         writer.add_scalar('Loss/Val', epoch_val_metrics['loss'], epoch)
-        writer.add_scalar('Accuracy/Train', epoch_train_metrics['accuracy'], epoch)
-        writer.add_scalar('Accuracy/Val', epoch_val_metrics['accuracy'], epoch)
         writer.add_scalar('Learning_Rate', optimizer.param_groups[0]['lr'], epoch)
         
         # Print epoch results
-        print(f"Train Loss: {epoch_train_metrics['loss']:.4f}, "
-              f"Train Acc: {epoch_train_metrics['accuracy']:.4f}")
-        print(f"Val Loss: {epoch_val_metrics['loss']:.4f}, "
-              f"Val Acc: {epoch_val_metrics['accuracy']:.4f}")
+        print(f"Train Loss: {epoch_train_metrics['loss']:.6f}")
+        print(f"Val Loss: {epoch_val_metrics['loss']:.6f}")
         
         # Save best model
-        if epoch_val_metrics['accuracy'] > best_val_acc:
-            best_val_acc = epoch_val_metrics['accuracy']
+        if epoch_val_metrics['loss'] < best_val_loss:
+            best_val_loss = epoch_val_metrics['loss']
             best_epoch = epoch
             
             if config.logging.save_best_only:
@@ -616,7 +618,7 @@ def main():
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
-                    'val_acc': best_val_acc,
+                    'val_loss': best_val_loss,
                     'config': config
                 }, os.path.join(config.logging.checkpoint_dir, 'best_model.pth'))
         
@@ -627,7 +629,7 @@ def main():
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
-                'val_acc': epoch_val_metrics['accuracy'],
+                'val_loss': epoch_val_metrics['loss'],
                 'config': config
             }, os.path.join(config.logging.checkpoint_dir, f'checkpoint_epoch_{epoch+1}.pth'))
         
@@ -639,31 +641,20 @@ def main():
     # Training completed
     training_time = time.time() - start_time
     print(f"\nTraining completed in {training_time/3600:.2f} hours")
-    print(f"Best validation accuracy: {best_val_acc:.4f} at epoch {best_epoch+1}")
+    print(f"Best validation loss: {best_val_loss:.6f} at epoch {best_epoch+1}")
     
-    # Final evaluation
-    print("\nFinal evaluation...")
-    final_val_metrics, final_predictions, final_targets = validate_epoch(
-        model, val_loader, criterion, device
-    )
+    # Final evaluation and visualization
+    print("\nGenerating visualizations...")
     
-    # Generate classification report
-    report = classification_report(final_targets, final_predictions, 
-                                 target_names=class_names, output_dict=True)
-    print("\nClassification Report:")
-    print(classification_report(final_targets, final_predictions, target_names=class_names))
-    
-    # Plot confusion matrix
-    if config.logging.plot_confusion_matrix:
-        cm_path = os.path.join(config.logging.log_dir, 'confusion_matrix.png')
-        plot_confusion_matrix(final_targets, final_predictions, class_names, cm_path)
-        print(f"Confusion matrix saved to: {cm_path}")
+    # Visualize reconstruction results
+    vis_path = os.path.join(config.logging.log_dir, 'mae_reconstruction.png')
+    visualize_mae_results(model, val_loader, device, vis_path)
+    print(f"Reconstruction visualization saved to: {vis_path}")
     
     # Plot training curves
-    if config.logging.plot_training_curves:
-        curves_path = os.path.join(config.logging.log_dir, 'training_curves.png')
-        plot_training_curves(train_metrics, val_metrics, curves_path)
-        print(f"Training curves saved to: {curves_path}")
+    curves_path = os.path.join(config.logging.log_dir, 'training_curves.png')
+    plot_training_curves(train_metrics, val_metrics, curves_path)
+    print(f"Training curves saved to: {curves_path}")
     
     # Save training log
     log_path = os.path.join(config.logging.log_dir, 'training_log.json')
@@ -677,13 +668,12 @@ def main():
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
-            'val_acc': final_val_metrics['accuracy'],
-            'config': config,
-            'classification_report': report
+            'val_loss': val_metrics['loss'][-1],
+            'config': config
         }, os.path.join(config.logging.checkpoint_dir, 'final_model.pth'))
     
     writer.close()
-    print("Training completed successfully!")
+    print("MAE training completed successfully!")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import numpy as np
 from typing import Tuple, Optional
 import random
-from vision_mamba import VisionMamba, PatchEmbedding, create_vision_mamba_tiny, create_vision_mamba_small, create_vision_mamba_base
+from .vision_mamba import VisionMamba, PatchEmbedding, create_vision_mamba_tiny, create_vision_mamba_small, create_vision_mamba_base
 
 
 class MAEDecoder(nn.Module):

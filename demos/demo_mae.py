@@ -8,8 +8,12 @@ import torchvision
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import numpy as np
-from vision_mamba_mae import create_vision_mamba_mae
-from yaml_config import get_config
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from vision_mamba.models import create_vision_mamba_mae
+from vision_mamba.config import get_config
 
 
 def demo_mae_reconstruction():

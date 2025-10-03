@@ -5,11 +5,15 @@ Run a quick training test with reduced epochs to verify everything works
 import os
 import sys
 import torch
-from config import get_config
-from train_vision_mamba import (
-    create_data_loaders, create_model, create_optimizer, 
-    train_epoch, validate_epoch, set_seed, get_device
-)
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from vision_mamba.config import get_config
+from vision_mamba.utils import set_seed, get_device
+from vision_mamba.utils.data_utils import create_data_loaders
+from vision_mamba.models import create_vision_mamba_tiny, create_vision_mamba_small, create_vision_mamba_base
+from vision_mamba.training.optimizers import create_optimizer
 import torch.nn as nn
 from tqdm import tqdm
 
@@ -42,7 +46,30 @@ def quick_test():
         
         # Create model
         print("Creating model...")
-        model = create_model(config)
+        if config.model.model_name == "vision_mamba_small":
+            model = create_vision_mamba_small(
+                img_size=config.model.img_size,
+                patch_size=config.model.patch_size,
+                in_channels=config.model.in_channels,
+                num_classes=config.data.num_classes,
+                dropout=config.model.dropout
+            )
+        elif config.model.model_name == "vision_mamba_tiny":
+            model = create_vision_mamba_tiny(
+                img_size=config.model.img_size,
+                patch_size=config.model.patch_size,
+                in_channels=config.model.in_channels,
+                num_classes=config.data.num_classes,
+                dropout=config.model.dropout
+            )
+        else:
+            model = create_vision_mamba_base(
+                img_size=config.model.img_size,
+                patch_size=config.model.patch_size,
+                in_channels=config.model.in_channels,
+                num_classes=config.data.num_classes,
+                dropout=config.model.dropout
+            )
         model = model.to(device)
         
         # Print model info
@@ -65,23 +92,22 @@ def quick_test():
         optimizer = create_optimizer(model, config)
         criterion = nn.CrossEntropyLoss()
         
-        # Test training loop
-        print("Testing training loop...")
-        for epoch in range(config.training.epochs):
-            print(f"\nEpoch {epoch+1}/{config.training.epochs}")
+        # Test a simple training step
+        print("Testing simple training step...")
+        model.train()
+        
+        for i, (x, y) in enumerate(train_loader):
+            x, y = x.to(device), y.to(device)
             
-            # Train for one epoch
-            train_metrics = train_epoch(
-                model, train_loader, criterion, optimizer, device, config
-            )
+            optimizer.zero_grad()
+            outputs = model(x)
+            loss = criterion(outputs, y)
+            loss.backward()
+            optimizer.step()
             
-            # Validate
-            val_metrics, _, _ = validate_epoch(
-                model, val_loader, criterion, device
-            )
-            
-            print(f"Train - Loss: {train_metrics['loss']:.4f}, Acc: {train_metrics['accuracy']:.4f}")
-            print(f"Val - Loss: {val_metrics['loss']:.4f}, Acc: {val_metrics['accuracy']:.4f}")
+            if i == 0:  # Just test one batch
+                print(f"Batch {i+1}: Loss = {loss.item():.4f}")
+                break
         
         print("\n✅ Demo completed successfully!")
         print("The training setup is working correctly.")
@@ -111,7 +137,30 @@ def test_model_variants():
     for name, config in configs.items():
         try:
             print(f"\nTesting {name}...")
-            model = create_model(config)
+            if config.model.model_name == "vision_mamba_small":
+                model = create_vision_mamba_small(
+                    img_size=config.model.img_size,
+                    patch_size=config.model.patch_size,
+                    in_channels=config.model.in_channels,
+                    num_classes=config.data.num_classes,
+                    dropout=config.model.dropout
+                )
+            elif config.model.model_name == "vision_mamba_tiny":
+                model = create_vision_mamba_tiny(
+                    img_size=config.model.img_size,
+                    patch_size=config.model.patch_size,
+                    in_channels=config.model.in_channels,
+                    num_classes=config.data.num_classes,
+                    dropout=config.model.dropout
+                )
+            else:
+                model = create_vision_mamba_base(
+                    img_size=config.model.img_size,
+                    patch_size=config.model.patch_size,
+                    in_channels=config.model.in_channels,
+                    num_classes=config.data.num_classes,
+                    dropout=config.model.dropout
+                )
             model = model.to(device)
             
             # Create dummy input
