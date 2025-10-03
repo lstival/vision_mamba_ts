@@ -1,0 +1,95 @@
+# Vision Mamba MAE CIFAR-10 Tiny Configuration
+# This configuration defines a lightweight Vision Mamba MAE model for CIFAR-10
+
+experiment_name: "vision_mamba_cifar10_tiny_mae"
+seed: 42
+device: "auto"  # auto, cpu, cuda
+
+# Model architecture configuration
+model:
+  model_name: "vision_mamba_tiny"
+  img_size: 224  
+  patch_size: 16  
+  in_channels: 3
+  embed_dim: 96  # Tiny model uses 96
+  depth: 6       # Tiny model uses 6 layers
+  d_state: 16
+  d_conv: 4
+  num_heads: 2   # Tiny model uses 2 heads
+  mlp_ratio: 4.0
+  dropout: 0.1
+  use_cls_token: false  # MAE doesn't need CLS token
+  
+  # MAE-specific parameters
+  mask_ratio: 0.75  # Mask 75% of patches
+  decoder_embed_dim: 192  # Decoder embedding dimension
+  decoder_depth: 16  # Number of decoder layers
+  decoder_num_heads: 2  # Number of attention heads in decoder
+
+# Dataset configuration
+data:
+  dataset_name: "CIFAR10"
+  data_dir: "./data"
+  num_classes: 10  # Not used for MAE but kept for compatibility
+  batch_size: 64  # Smaller batch size for MAE
+  val_batch_size: 128
+  num_workers: 4
+  pin_memory: true
+  
+  # Data augmentation (lighter for MAE)
+  use_augmentation: true
+  random_crop: false  # Disable random crop for cleaner reconstruction
+  random_flip: true
+  normalize: false  # Disable normalization for better reconstruction visualization
+  
+  # Dataset split (for validation if needed)
+  train_ratio: 0.8
+  val_ratio: 0.2
+
+# Training configuration
+training:
+  epochs: 100  # Fewer epochs for MAE
+  learning_rate: 0.0015  # Slightly higher LR for MAE
+  weight_decay: 0.05  # Higher weight decay for MAE
+  optimizer: "adamw"  # adam, adamw, sgd
+  scheduler: "cosine"  # cosine, step, plateau
+  
+  # Learning rate scheduler parameters
+  min_lr: 0.0000001
+  warmup_epochs: 10
+  step_size: 30
+  gamma: 0.1
+  
+  # Early stopping
+  patience: 20  # More patience for MAE
+  min_delta: 0.00001
+  
+  # Gradient clipping
+  max_grad_norm: 1.0
+  
+  # Loss function
+  label_smoothing: 0.0  # Not used for MAE
+  
+  # Mixed precision training
+  use_amp: true
+
+# Logging and checkpointing configuration
+logging:
+  log_dir: "./logs"
+  checkpoint_dir: "./checkpoints"
+  tensorboard_dir: "./tensorboard"
+  
+  # Logging frequency
+  log_interval: 10  # Log every N batches
+  val_interval: 1   # Validate every N epochs
+  save_interval: 10  # Save checkpoint every N epochs (less frequent)
+  
+  # What to save
+  save_best_only: true
+  save_last: true
+  monitor_metric: "val_loss"  # Monitor validation loss for MAE
+  
+  # Visualization
+  plot_training_curves: true
+  plot_confusion_matrix: false  # Not applicable for MAE
+  save_predictions: false  # Not applicable for MAE

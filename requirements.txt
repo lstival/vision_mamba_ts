@@ -23,5 +23,9 @@ tensorboard>=2.10.0
 # Uncomment if needed:
 # timm>=0.6.0  # for additional model utilities
 # wandb>=0.13.0  # for experiment tracking
-# pillow>=8.0.0  # for image processing
+pillow>=8.0.0  # for image processing
 # opencv-python>=4.5.0  # for advanced image processing
+
+# For advanced MAE evaluation metrics (PSNR, SSIM)
+# Install with: pip install scikit-image
+# scikit-image>=0.19.0

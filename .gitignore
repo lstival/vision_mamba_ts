@@ -4,3 +4,6 @@
 /__pycache__
 /data
 /evaluation_results
+/fast_Attention_test
+/_old
+*.png
