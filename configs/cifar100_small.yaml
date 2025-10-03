@@ -1,0 +1,78 @@
+# Vision Mamba CIFAR-100 Small Configuration
+# This configuration defines a small Vision Mamba model for CIFAR-100
+
+experiment_name: "vision_mamba_cifar100_small"
+seed: 42
+device: "auto"
+
+# Model architecture configuration
+model:
+  name: "vision_mamba_small"
+  img_size: 32
+  patch_size: 4
+  in_channels: 3
+  embed_dim: 384
+  depth: 16
+  d_state: 16
+  d_conv: 4
+  num_heads: 6
+  mlp_ratio: 4.0
+  dropout: 0.1
+  use_cls_token: true
+
+# Dataset configuration
+data:
+  dataset_name: "CIFAR100"
+  data_dir: "./data"
+  num_classes: 100
+  batch_size: 128
+  val_batch_size: 256
+  num_workers: 4
+  pin_memory: true
+  
+  # Data augmentation
+  use_augmentation: true
+  random_crop: true
+  random_flip: true
+  normalize: true
+  
+  train_ratio: 0.8
+  val_ratio: 0.2
+
+# Training configuration
+training:
+  epochs: 300
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: "adamw"
+  scheduler: "cosine"
+  
+  min_lr: 0.000001
+  warmup_epochs: 20
+  step_size: 50
+  gamma: 0.1
+  
+  patience: 20
+  min_delta: 0.0001
+  
+  max_grad_norm: 1.0
+  label_smoothing: 0.2  # Higher for CIFAR-100
+  use_amp: true
+
+# Logging configuration
+logging:
+  log_dir: "./logs"
+  checkpoint_dir: "./checkpoints"
+  tensorboard_dir: "./tensorboard"
+  
+  log_interval: 10
+  val_interval: 1
+  save_interval: 10
+  
+  save_best_only: true
+  save_last: true
+  monitor_metric: "val_acc"
+  
+  plot_training_curves: true
+  plot_confusion_matrix: true
+  save_predictions: true

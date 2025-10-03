@@ -1,0 +1,78 @@
+# Vision Mamba Fashion-MNIST Configuration
+# This configuration defines a tiny Vision Mamba model for Fashion-MNIST
+
+experiment_name: "vision_mamba_fashion_mnist"
+seed: 42
+device: "auto"
+
+# Model architecture configuration
+model:
+  name: "vision_mamba_tiny"
+  img_size: 28  # Fashion-MNIST native size
+  patch_size: 4
+  in_channels: 1  # Grayscale
+  embed_dim: 128
+  depth: 8
+  d_state: 16
+  d_conv: 4
+  num_heads: 2
+  mlp_ratio: 4.0
+  dropout: 0.1
+  use_cls_token: true
+
+# Dataset configuration
+data:
+  dataset_name: "FashionMNIST"
+  data_dir: "./data"
+  num_classes: 10
+  batch_size: 256
+  val_batch_size: 512
+  num_workers: 4
+  pin_memory: true
+  
+  # Data augmentation (less aggressive for Fashion-MNIST)
+  use_augmentation: true
+  random_crop: false  # No random crop for 28x28
+  random_flip: true
+  normalize: true
+  
+  train_ratio: 0.8
+  val_ratio: 0.2
+
+# Training configuration
+training:
+  epochs: 100
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: "adamw"
+  scheduler: "cosine"
+  
+  min_lr: 0.000001
+  warmup_epochs: 5
+  step_size: 20
+  gamma: 0.1
+  
+  patience: 10
+  min_delta: 0.0001
+  
+  max_grad_norm: 1.0
+  label_smoothing: 0.05  # Light smoothing
+  use_amp: true
+
+# Logging configuration
+logging:
+  log_dir: "./logs"
+  checkpoint_dir: "./checkpoints"
+  tensorboard_dir: "./tensorboard"
+  
+  log_interval: 10
+  val_interval: 1
+  save_interval: 5
+  
+  save_best_only: true
+  save_last: true
+  monitor_metric: "val_acc"
+  
+  plot_training_curves: true
+  plot_confusion_matrix: true
+  save_predictions: true

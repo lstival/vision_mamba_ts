@@ -27,7 +27,7 @@ class ModelConfig:
 @dataclass
 class DataConfig:
     """Dataset configuration"""
-    dataset_name: str = "CIFAR10"  # Options: CIFAR10, CIFAR100, ImageNet, FashionMNIST
+    dataset_name: str = "CIFAR10"  # Options: CIFAR10, CIFAR100, imagenet, FashionMNIST
     data_dir: str = "./data"
     num_classes: int = 10
     batch_size: int = 128
@@ -101,7 +101,6 @@ class LoggingConfig:
 @dataclass
 class ExperimentConfig:
     """Complete experiment configuration"""
-    experiment_name: str = "vision_mamba_cifar10"
     seed: int = 42
     device: str = "auto"  # auto, cpu, cuda
     
@@ -113,6 +112,8 @@ class ExperimentConfig:
     
     def __post_init__(self):
         """Post-initialization to set up paths and validate config"""
+        self.experiment_name: str = f"vision_mamba_{self.data.dataset_name}"
+
         # Update model num_classes based on dataset
         if self.data.dataset_name == "CIFAR10":
             self.data.num_classes = 10
@@ -120,7 +121,7 @@ class ExperimentConfig:
             self.data.num_classes = 100
         elif self.data.dataset_name == "FashionMNIST":
             self.data.num_classes = 10
-        elif self.data.dataset_name == "ImageNet":
+        elif self.data.dataset_name == "imagenet":
             self.data.num_classes = 1000
             
         # Create directories
@@ -188,7 +189,7 @@ def get_imagenet_config():
     """ImageNet experiment configuration (requires more resources)"""
     config = ExperimentConfig()
     config.experiment_name = "vision_mamba_imagenet"
-    config.data.dataset_name = "ImageNet"
+    config.data.dataset_name = "imagenet"
     config.data.num_classes = 1000
     config.data.batch_size = 64  # Smaller batch size for memory
     config.model.model_name = "vision_mamba_base"  # Larger model
@@ -218,7 +219,8 @@ def get_config(config_name: str = "cifar10") -> ExperimentConfig:
 
 if __name__ == "__main__":
     # Example usage
-    config = get_cifar10_config()
+    # config = get_cifar10_config()
+    config = get_imagenet_config()
     print(f"Experiment: {config.experiment_name}")
     print(f"Dataset: {config.data.dataset_name}")
     print(f"Model: {config.model.model_name}")

@@ -19,7 +19,7 @@ def quick_test():
     print("Running Vision Mamba training demo...")
     
     # Get a minimal config for testing
-    config = get_config("cifar10")
+    config = get_config("imagenet")
     config.training.epochs = 2  # Just 2 epochs for demo
     config.data.batch_size = 32  # Smaller batch size
     config.data.num_workers = 0  # No multiprocessing for demo
@@ -116,9 +116,9 @@ def test_model_variants():
             
             # Create dummy input
             if config.model.in_channels == 1:
-                dummy_input = torch.randn(2, 1, 224, 224).to(device)
+                dummy_input = torch.randn(2, 1, 32, 32).to(device)
             else:
-                dummy_input = torch.randn(2, 3, 224, 224).to(device)
+                dummy_input = torch.randn(2, 3, 32, 32).to(device)
             
             with torch.no_grad():
                 output = model(dummy_input)

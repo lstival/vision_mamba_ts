@@ -1,0 +1,78 @@
+# Vision Mamba ImageNet Base Configuration
+# This configuration defines a base Vision Mamba model for ImageNet
+
+experiment_name: "vision_mamba_imagenet_base"
+seed: 42
+device: "auto"
+
+# Model architecture configuration
+model:
+  name: "vision_mamba_base"
+  img_size: 224  # ImageNet standard
+  patch_size: 16
+  in_channels: 3
+  embed_dim: 768
+  depth: 24
+  d_state: 16
+  d_conv: 4
+  num_heads: 12
+  mlp_ratio: 4.0
+  dropout: 0.1
+  use_cls_token: true
+
+# Dataset configuration
+data:
+  dataset_name: "imagenet"
+  data_dir: "./data/imagenet"
+  num_classes: 1000
+  batch_size: 64  # Smaller batch for memory constraints
+  val_batch_size: 128
+  num_workers: 8
+  pin_memory: true
+  
+  # Data augmentation (standard ImageNet augmentation)
+  use_augmentation: true
+  random_crop: true
+  random_flip: true
+  normalize: true
+  
+  train_ratio: 0.8
+  val_ratio: 0.2
+
+# Training configuration
+training:
+  epochs: 300
+  learning_rate: 0.0001  # Lower LR for larger model
+  weight_decay: 0.05
+  optimizer: "adamw"
+  scheduler: "cosine"
+  
+  min_lr: 0.00001
+  warmup_epochs: 20
+  step_size: 100
+  gamma: 0.1
+  
+  patience: 30
+  min_delta: 0.0001
+  
+  max_grad_norm: 1.0
+  label_smoothing: 0.1
+  use_amp: true
+
+# Logging configuration
+logging:
+  log_dir: "./logs"
+  checkpoint_dir: "./checkpoints"
+  tensorboard_dir: "./tensorboard"
+  
+  log_interval: 50
+  val_interval: 1
+  save_interval: 10
+  
+  save_best_only: true
+  save_last: true
+  monitor_metric: "val_acc"
+  
+  plot_training_curves: true
+  plot_confusion_matrix: false  # Too many classes for useful visualization
+  save_predictions: true

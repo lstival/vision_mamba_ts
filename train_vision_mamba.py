@@ -25,7 +25,7 @@ from sklearn.metrics import confusion_matrix, classification_report, accuracy_sc
 
 # Import our modules
 from vision_mamba import create_vision_mamba_small, create_vision_mamba_base, create_vision_mamba_tiny, VisionMamba
-from config import ExperimentConfig, get_config
+from yaml_config import Config, get_config, list_available_configs
 
 
 class EarlyStopping:
@@ -110,7 +110,7 @@ def get_device(device_config):
         return torch.device(device_config)
 
 
-def create_data_loaders(config: ExperimentConfig):
+def create_data_loaders(config: Config):
     """Create data loaders for training and validation"""
     
     # Define transforms
@@ -185,6 +185,14 @@ def create_data_loaders(config: ExperimentConfig):
         )
         class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
                       'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
+    elif config.data.dataset_name == "imagenet":
+        train_dataset = torchvision.datasets.ImageNet(
+            root=config.data.data_dir, train=True, download=True, transform=train_transform
+        )
+        val_dataset = torchvision.datasets.ImageNet(
+            root=config.data.data_dir, train=False, download=True, transform=val_transform
+        )
+        class_names = []
     else:
         raise ValueError(f"Unsupported dataset: {config.data.dataset_name}")
     
@@ -208,7 +216,7 @@ def create_data_loaders(config: ExperimentConfig):
     return train_loader, val_loader, class_names
 
 
-def create_model(config: ExperimentConfig):
+def create_model(config: Config):
     """Create the Vision Mamba model"""
     if config.model.model_name == "vision_mamba_small":
         model = create_vision_mamba_small(
@@ -254,7 +262,7 @@ def create_model(config: ExperimentConfig):
     return model
 
 
-def create_optimizer(model, config: ExperimentConfig):
+def create_optimizer(model, config: Config):
     """Create optimizer"""
     if config.training.optimizer.lower() == "adam":
         optimizer = optim.Adam(
@@ -281,7 +289,7 @@ def create_optimizer(model, config: ExperimentConfig):
     return optimizer
 
 
-def create_scheduler(optimizer, config: ExperimentConfig, steps_per_epoch):
+def create_scheduler(optimizer, config: Config, steps_per_epoch):
     """Create learning rate scheduler"""
     if config.training.scheduler.lower() == "cosine":
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -477,14 +485,30 @@ def main():
     # Parse arguments or use default config
     import argparse
     parser = argparse.ArgumentParser(description='Train Vision Mamba')
-    parser.add_argument('--config', type=str, default='cifar10',
-                       help='Configuration name (cifar10, cifar100, fashion_mnist)')
+    parser.add_argument('--config', type=str, default='cifar10_tiny',
+                       help='Configuration name (without .yaml extension)')
+    parser.add_argument('--config-path', type=str, default=None,
+                       help='Full path to configuration file')
     parser.add_argument('--resume', type=str, default=None,
                        help='Path to checkpoint to resume from')
+    parser.add_argument('--list-configs', action='store_true',
+                       help='List available configurations and exit')
     args = parser.parse_args()
     
+    # Handle list configs
+    if args.list_configs:
+        print("Available configurations:")
+        configs = list_available_configs()
+        for config_name in configs:
+            print(f"  - {config_name}")
+        return
+    
     # Get configuration
-    config = get_config(args.config)
+    if args.config_path:
+        from yaml_config import load_config
+        config = load_config(args.config_path)
+    else:
+        config = get_config(args.config)
     
     # Set seed
     set_seed(config.seed)
